@@ -150,10 +150,14 @@ describe('LightRAGBridge', () => {
     it('should reject pending requests on stop', async () => {
       const responsePromise = bridge.call('ping', {});
       
-      // Stop bridge before response arrives
-      await bridge.stop();
+      // Stop bridge before response arrives and catch rejection immediately
+      const stopPromise = bridge.stop();
       
-      await expect(responsePromise).rejects.toThrow('Bridge stopped');
+      // Both should complete - stop succeeds and call rejects
+      await Promise.all([
+        stopPromise,
+        expect(responsePromise).rejects.toThrow('Bridge stopped')
+      ]);
     });
   });
   

@@ -61,7 +61,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: lightrag-mcp-server/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -206,8 +206,8 @@ jobs:
         with:
           name: offline-bundle
           path: |
-            lightrag-mcp-server/lightrag-mcp-server-v*.tar.gz
-            lightrag-mcp-server/lightrag-mcp-server-v*.tar.gz.sha256
+            lightrag-mcp-server-v*.tar.gz
+            lightrag-mcp-server-v*.tar.gz.sha256
           retention-days: 90
 
   create-release:
