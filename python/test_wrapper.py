@@ -16,7 +16,7 @@ from lightrag_wrapper import LightRAGWrapper
 
 
 @pytest.fixture
-async def wrapper():
+def wrapper():
     """Create a test wrapper instance"""
     with patch.dict(os.environ, {
         "OPENAI_API_KEY": "test-key",

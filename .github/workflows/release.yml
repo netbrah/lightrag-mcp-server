@@ -69,7 +69,6 @@ jobs:
           python-version: '3.11'
 
       - name: Install and bundle Node.js dependencies
-        working-directory: lightrag-mcp-server
         run: |
           echo "📦 Installing Node.js dependencies..."
           npm ci
@@ -79,7 +78,6 @@ jobs:
           echo "✅ Node modules bundled: $(du -h node_modules.tar.gz | cut -f1)"
 
       - name: Download and bundle Python dependencies
-        working-directory: lightrag-mcp-server
         run: |
           echo "📦 Downloading Python dependencies..."
           mkdir -p python-packages
@@ -102,7 +100,6 @@ jobs:
           echo "   Total packages: $(ls python-packages/ | wc -l)"
 
       - name: Download and bundle Tiktoken cache
-        working-directory: lightrag-mcp-server
         run: |
           echo "📦 Downloading Tiktoken cache..."
           pip install lightrag-hku
@@ -110,42 +107,41 @@ jobs:
           
           # Download common model caches
           python << 'EOF'
-import tiktoken
-import os
-import shutil
-
-cache_dir = "tiktoken-cache"
-models = [
-    "gpt-4o-mini",
-    "gpt-4o", 
-    "gpt-4",
-    "gpt-3.5-turbo",
-    "text-embedding-ada-002",
-    "text-embedding-3-small",
-    "text-embedding-3-large"
-]
-
-for model in models:
-    try:
-        enc = tiktoken.encoding_for_model(model)
-        print(f"✓ Downloaded cache for {model}")
-    except Exception as e:
-        print(f"⚠ Could not download {model}: {e}")
-
-# Copy cache files
-tiktoken_cache = os.path.expanduser("~/.tiktoken_cache")
-if os.path.exists(tiktoken_cache):
-    for f in os.listdir(tiktoken_cache):
-        shutil.copy2(os.path.join(tiktoken_cache, f), cache_dir)
-    print(f"✓ Copied {len(os.listdir(cache_dir))} cache files")
-EOF
+          import tiktoken
+          import os
+          import shutil
+          
+          cache_dir = "tiktoken-cache"
+          models = [
+              "gpt-4o-mini",
+              "gpt-4o", 
+              "gpt-4",
+              "gpt-3.5-turbo",
+              "text-embedding-ada-002",
+              "text-embedding-3-small",
+              "text-embedding-3-large"
+          ]
+          
+          for model in models:
+              try:
+                  enc = tiktoken.encoding_for_model(model)
+                  print(f"✓ Downloaded cache for {model}")
+              except Exception as e:
+                  print(f"⚠ Could not download {model}: {e}")
+          
+          # Copy cache files
+          tiktoken_cache = os.path.expanduser("~/.tiktoken_cache")
+          if os.path.exists(tiktoken_cache):
+              for f in os.listdir(tiktoken_cache):
+                  shutil.copy2(os.path.join(tiktoken_cache, f), cache_dir)
+              print(f"✓ Copied {len(os.listdir(cache_dir))} cache files")
+          EOF
           
           echo "📦 Creating Tiktoken cache bundle..."
           tar -czf tiktoken-cache.tar.gz tiktoken-cache/
           echo "✅ Tiktoken cache bundled: $(du -h tiktoken-cache.tar.gz | cut -f1)"
 
       - name: Build TypeScript
-        working-directory: lightrag-mcp-server
         run: |
           echo "🔨 Building TypeScript..."
           npm run build
@@ -153,7 +149,6 @@ EOF
           echo "✅ TypeScript built successfully"
 
       - name: Generate checksums
-        working-directory: lightrag-mcp-server
         run: |
           echo "🔐 Generating checksums..."
           sha256sum node_modules.tar.gz > checksums.txt
@@ -164,7 +159,6 @@ EOF
           cat checksums.txt
 
       - name: Create offline bundle
-        working-directory: lightrag-mcp-server
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
           BUNDLE_NAME="lightrag-mcp-server-v${VERSION}-offline-bundle"
