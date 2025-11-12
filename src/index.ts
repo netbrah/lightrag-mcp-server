@@ -119,8 +119,56 @@ class LightRAGMCPServer {
                 description: 'Return only context without LLM-generated answer (default: false)',
                 default: false,
               },
+              response_type: {
+                type: 'string',
+                description: 'Format of the response (e.g., "Multiple Paragraphs", "Single Paragraph", "Bullet Points")',
+                default: 'Multiple Paragraphs',
+              },
+              max_token_for_text_unit: {
+                type: 'number',
+                description: 'Maximum tokens for each text unit (default: 4000)',
+                default: 4000,
+              },
+              max_token_for_global_context: {
+                type: 'number',
+                description: 'Maximum tokens for global context (default: 4000)',
+                default: 4000,
+              },
+              max_token_for_local_context: {
+                type: 'number',
+                description: 'Maximum tokens for local context (default: 4000)',
+                default: 4000,
+              },
+              hl_keywords: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'High-level keywords to prioritize in search (e.g., selected symbols)',
+              },
+              ll_keywords: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Low-level keywords for search refinement',
+              },
             },
             required: ['query'],
+          },
+        },
+        {
+          name: 'lightrag_insert_text',
+          description: 'Insert text content directly into the knowledge graph without a file (useful for indexing clipboard content, code snippets, or selections)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              text: {
+                type: 'string',
+                description: 'Text content to insert',
+              },
+              metadata: {
+                type: 'object',
+                description: 'Optional metadata about the text',
+              },
+            },
+            required: ['text'],
           },
         },
         {
@@ -215,6 +263,9 @@ class LightRAGMCPServer {
           case 'lightrag_search_code':
             return await this.handleSearchCode(args);
 
+          case 'lightrag_insert_text':
+            return await this.handleInsertText(args);
+
           case 'lightrag_get_indexing_status':
             return await this.handleGetIndexingStatus(args);
 
@@ -280,7 +331,18 @@ ${result.errors.length > 5 ? `\n... and ${result.errors.length - 5} more` : ''}`
   }
 
   private async handleSearchCode(args: any) {
-    const { query, mode = 'hybrid', top_k = 20, only_context = false } = args;
+    const { 
+      query, 
+      mode = 'hybrid', 
+      top_k = 20, 
+      only_context = false,
+      response_type = 'Multiple Paragraphs',
+      max_token_for_text_unit = 4000,
+      max_token_for_global_context = 4000,
+      max_token_for_local_context = 4000,
+      hl_keywords,
+      ll_keywords
+    } = args;
 
     if (!query || typeof query !== 'string') {
       throw new Error('query must be a non-empty string');
@@ -289,7 +351,18 @@ ${result.errors.length > 5 ? `\n... and ${result.errors.length - 5} more` : ''}`
     console.log(`Searching: "${query}" (mode=${mode})`);
     const startTime = Date.now();
 
-    const result = await this.bridge.call('search_code', { query, mode, top_k, only_context });
+    const result = await this.bridge.call('search_code', { 
+      query, 
+      mode, 
+      top_k, 
+      only_context,
+      response_type,
+      max_token_for_text_unit,
+      max_token_for_global_context,
+      max_token_for_local_context,
+      hl_keywords,
+      ll_keywords
+    });
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -320,6 +393,35 @@ ${result.answer}`;
         {
           type: 'text',
           text: responseText,
+        },
+      ],
+    };
+  }
+
+  private async handleInsertText(args: any) {
+    const { text, metadata } = args;
+
+    if (!text || typeof text !== 'string') {
+      throw new Error('text must be a non-empty string');
+    }
+
+    console.log(`Inserting text content (${text.length} chars)...`);
+    const startTime = Date.now();
+
+    const result = await this.bridge.call('insert_text', { text, metadata });
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    const summary = `${result.success ? '✅' : '❌'} ${result.message}
+
+**Duration:** ${duration}s
+**Content Length:** ${text.length} characters`;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: summary,
         },
       ],
     };

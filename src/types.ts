@@ -46,6 +46,12 @@ export interface SearchCodeParams {
   mode?: 'local' | 'global' | 'hybrid' | 'mix' | 'naive';
   top_k?: number;
   only_context?: boolean;
+  response_type?: string;
+  max_token_for_text_unit?: number;
+  max_token_for_global_context?: number;
+  max_token_for_local_context?: number;
+  hl_keywords?: string[];
+  ll_keywords?: string[];
 }
 
 export interface SearchCodeResult {
@@ -89,6 +95,16 @@ export interface VisualizeSubgraphResult {
   format: string;
   diagram: string;
   max_nodes: number;
+}
+
+export interface InsertTextParams {
+  text: string;
+  metadata?: Record<string, any>;
+}
+
+export interface InsertTextResult {
+  success: boolean;
+  message: string;
 }
 
 export interface IndexingStatusResult {

@@ -9,6 +9,8 @@ Graph-based code search MCP server that integrates LightRAG with VS Code Copilot
 - 📊 **Visual architecture**: Generate Mermaid diagrams from code
 - ⚡ **Incremental indexing**: Real-time updates as code changes
 - 🗄️ **Flexible storage**: Development (NetworkX) and production (Neo4J + Milvus)
+- 🎯 **IDE-optimized**: Response formatting, keyword prioritization, and token control
+- 📋 **Direct text insertion**: Index clipboard/selection content without files
 
 ## Quick Start
 
@@ -55,6 +57,7 @@ See [docs/](../docs/mcp/) for complete documentation:
 - [Architecture](../docs/mcp/ARCHITECTURE.md)
 - [Setup Guide](../docs/mcp/SETUP.md)
 - [Usage Guide](../docs/mcp/USAGE.md)
+- [VSCode Features](../docs/mcp/VSCODE_FEATURES.md) - **NEW**: IDE-specific features
 - [Contributing](../docs/mcp/CONTRIBUTING.md)
 
 ## License
