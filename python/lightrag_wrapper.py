@@ -93,9 +93,6 @@ class LightRAGWrapper:
                 logger.warning("Milvus libraries not available, falling back to NanoVectorDB")
         
         # Initialize LightRAG
-        # Note: text-embedding-3-large has 3072 dimensions, ada-002 has 1536
-        embedding_dim = 3072 if "text-embedding-3" in self.openai_embedding_model else 1536
-        
         self.rag = LightRAG(
             working_dir=str(self.working_dir),
             llm_model_func=openai_complete_if_cache,
@@ -105,7 +102,6 @@ class LightRAGWrapper:
                 "base_url": self.openai_base_url,
             },
             embedding_func=openai_embed,
-            embedding_dim=embedding_dim,
             embedding_batch_num=16,
             embedding_func_max_async=16,
             **storage_kwargs

@@ -1,9 +1,20 @@
 import { LightRAGBridge, BridgeConfig } from '../../src/lightrag-bridge.js';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 
 // Mock child_process
 jest.mock('child_process');
+
+// Helper to create a mock readable stream
+function createMockReadable(): Readable {
+  const readable = new Readable({
+    read() {
+      // No-op
+    },
+  });
+  return readable;
+}
 
 describe('LightRAGBridge', () => {
   let bridge: LightRAGBridge;
@@ -24,8 +35,9 @@ describe('LightRAGBridge', () => {
         if (callback) callback();
       }),
     };
-    mockProcess.stdout = new EventEmitter();
-    mockProcess.stderr = new EventEmitter();
+    // Use proper Readable streams for stdout/stderr
+    mockProcess.stdout = createMockReadable();
+    mockProcess.stderr = createMockReadable();
     mockProcess.kill = jest.fn();
     mockProcess.killed = false;
     
@@ -78,7 +90,7 @@ describe('LightRAGBridge', () => {
           id: 1,
           result: 'pong',
         });
-        mockProcess.stdout.emit('data', Buffer.from(response + '\n'));
+        mockProcess.stdout.push(response + '\n');
       }, 10);
       
       const result = await responsePromise;
@@ -102,7 +114,7 @@ describe('LightRAGBridge', () => {
             message: 'Method not found',
           },
         });
-        mockProcess.stdout.emit('data', Buffer.from(response + '\n'));
+        mockProcess.stdout.push(response + '\n');
       }, 10);
       
       await expect(responsePromise).rejects.toThrow('Method not found');
