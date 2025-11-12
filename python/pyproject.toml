@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightrag-mcp-wrapper"
+version = "0.1.0"
+description = "Python JSON-RPC bridge for LightRAG MCP Server"
+readme = "../README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "netbrah"}
+]
+keywords = ["lightrag", "mcp", "json-rpc", "code-search", "graph-rag"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "lightrag-hku>=0.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/netbrah/LightRAG"
+Repository = "https://github.com/netbrah/LightRAG"
+Issues = "https://github.com/netbrah/LightRAG/issues"

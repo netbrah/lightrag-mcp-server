@@ -1,0 +1,49 @@
+{
+  "name": "lightrag-mcp-server",
+  "version": "0.1.0",
+  "description": "Graph-based code search MCP server using LightRAG",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lightrag-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.19.25",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "glob": "^11.0.3",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "vscode",
+    "copilot",
+    "code-search",
+    "graph-rag",
+    "lightrag"
+  ],
+  "author": "netbrah",
+  "license": "MIT"
+}
