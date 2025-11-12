@@ -33,12 +33,60 @@ print_info() {
     echo -e "${YELLOW}ℹ${NC} $1"
 }
 
+detect_os() {
+    if [ -f /etc/redhat-release ]; then
+        OS_TYPE="RHEL"
+        OS_VERSION=$(cat /etc/redhat-release)
+        print_info "$OS_VERSION detected"
+        return 0
+    elif [ -f /etc/debian_version ]; then
+        OS_TYPE="Debian"
+        return 0
+    else
+        OS_TYPE="Unknown"
+        return 0
+    fi
+}
+
+check_rhel_dependencies() {
+    print_info "Verifying RHEL system packages..."
+    
+    MISSING_PKGS=()
+    
+    # Check for required system packages
+    for pkg in gcc make openssl-devel python3-devel; do
+        if ! rpm -q $pkg &> /dev/null; then
+            MISSING_PKGS+=("$pkg")
+        fi
+    done
+    
+    if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
+        print_error "Missing system packages: ${MISSING_PKGS[*]}"
+        print_info "Install with: sudo dnf install -y ${MISSING_PKGS[*]}"
+        print_info "See RHEL9_SETUP.md for complete installation guide"
+        exit 1
+    fi
+    
+    print_success "All required system packages found"
+}
+
 check_prerequisites() {
     print_info "Checking prerequisites..."
+    
+    # Detect operating system
+    detect_os
+    
+    # Check RHEL-specific dependencies
+    if [ "$OS_TYPE" = "RHEL" ]; then
+        check_rhel_dependencies
+    fi
     
     # Check Node.js
     if ! command -v node &> /dev/null; then
         print_error "Node.js is not installed. Please install Node.js 18 or 20."
+        if [ "$OS_TYPE" = "RHEL" ]; then
+            print_info "Install with: sudo dnf module install -y nodejs:20"
+        fi
         exit 1
     fi
     NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
@@ -51,6 +99,9 @@ check_prerequisites() {
     # Check Python
     if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
         print_error "Python is not installed. Please install Python 3.10 or 3.11."
+        if [ "$OS_TYPE" = "RHEL" ]; then
+            print_info "Install with: sudo dnf install -y python3.11 python3.11-devel python3.11-pip"
+        fi
         exit 1
     fi
     PYTHON_CMD=$(command -v python3 || command -v python)
@@ -63,6 +114,17 @@ check_prerequisites() {
         exit 1
     fi
     print_success "pip found"
+    
+    # Check GCC (important for native modules)
+    if [ "$OS_TYPE" = "RHEL" ]; then
+        if ! command -v gcc &> /dev/null; then
+            print_error "GCC is not installed"
+            print_info "Install with: sudo dnf install -y gcc gcc-c++"
+            exit 1
+        fi
+        GCC_VERSION=$(gcc --version | head -1 | awk '{print $3}')
+        print_success "GCC $GCC_VERSION found"
+    fi
 }
 
 verify_checksums() {
@@ -111,8 +173,14 @@ install_python_dependencies() {
     
     PYTHON_CMD=$(command -v python3 || command -v python)
     
+    if [ -f "python-packages.tar.gz" ]; then
+        print_info "Extracting Python packages..."
+        tar -xzf python-packages.tar.gz
+    fi
+    
     if [ -d "python-packages" ]; then
-        $PYTHON_CMD -m pip install --no-index --find-links=python-packages lightrag-hku[offline] --quiet
+        # Install with --user flag to avoid permission issues
+        $PYTHON_CMD -m pip install --no-index --find-links=python-packages --user lightrag-hku --quiet
         print_success "Python dependencies installed"
     else
         print_error "Python packages directory not found"

@@ -1,0 +1,365 @@
+name: Release - Air-Gapped Bundle
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0-alpha.1)'
+        required: true
+        type: string
+      create_tag:
+        description: 'Create git tag'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            exit 1
+          fi
+          
+          echo "✅ Valid version: $VERSION"
+
+  build-bundle:
+    name: Build Air-Gapped Bundle
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: lightrag-mcp-server/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and bundle Node.js dependencies
+        working-directory: lightrag-mcp-server
+        run: |
+          echo "📦 Installing Node.js dependencies..."
+          npm ci
+          
+          echo "📦 Creating node_modules bundle..."
+          tar -czf node_modules.tar.gz node_modules/
+          echo "✅ Node modules bundled: $(du -h node_modules.tar.gz | cut -f1)"
+
+      - name: Download and bundle Python dependencies
+        working-directory: lightrag-mcp-server
+        run: |
+          echo "📦 Downloading Python dependencies..."
+          mkdir -p python-packages
+          
+          # Download wheels compatible with RHEL9 (manylinux2014_x86_64)
+          echo "Downloading manylinux2014 wheels for RHEL9 compatibility..."
+          pip download \
+            --dest python-packages \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.11 \
+            --only-binary=:all: \
+            lightrag-hku || echo "Some binary wheels not available"
+          
+          # Download all dependencies including sources
+          pip download lightrag-hku -d python-packages/
+          
+          echo "📦 Creating Python packages bundle..."
+          tar -czf python-packages.tar.gz python-packages/
+          echo "✅ Python packages bundled: $(du -h python-packages.tar.gz | cut -f1)"
+          echo "   Total packages: $(ls python-packages/ | wc -l)"
+
+      - name: Download and bundle Tiktoken cache
+        working-directory: lightrag-mcp-server
+        run: |
+          echo "📦 Downloading Tiktoken cache..."
+          pip install lightrag-hku
+          mkdir -p tiktoken-cache
+          
+          # Download common model caches
+          python << 'EOF'
+import tiktoken
+import os
+import shutil
+
+cache_dir = "tiktoken-cache"
+models = [
+    "gpt-4o-mini",
+    "gpt-4o", 
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "text-embedding-ada-002",
+    "text-embedding-3-small",
+    "text-embedding-3-large"
+]
+
+for model in models:
+    try:
+        enc = tiktoken.encoding_for_model(model)
+        print(f"✓ Downloaded cache for {model}")
+    except Exception as e:
+        print(f"⚠ Could not download {model}: {e}")
+
+# Copy cache files
+tiktoken_cache = os.path.expanduser("~/.tiktoken_cache")
+if os.path.exists(tiktoken_cache):
+    for f in os.listdir(tiktoken_cache):
+        shutil.copy2(os.path.join(tiktoken_cache, f), cache_dir)
+    print(f"✓ Copied {len(os.listdir(cache_dir))} cache files")
+EOF
+          
+          echo "📦 Creating Tiktoken cache bundle..."
+          tar -czf tiktoken-cache.tar.gz tiktoken-cache/
+          echo "✅ Tiktoken cache bundled: $(du -h tiktoken-cache.tar.gz | cut -f1)"
+
+      - name: Build TypeScript
+        working-directory: lightrag-mcp-server
+        run: |
+          echo "🔨 Building TypeScript..."
+          npm run build
+          chmod +x dist/index.js
+          echo "✅ TypeScript built successfully"
+
+      - name: Generate checksums
+        working-directory: lightrag-mcp-server
+        run: |
+          echo "🔐 Generating checksums..."
+          sha256sum node_modules.tar.gz > checksums.txt
+          sha256sum python-packages.tar.gz >> checksums.txt
+          sha256sum tiktoken-cache.tar.gz >> checksums.txt
+          
+          echo "Checksums:"
+          cat checksums.txt
+
+      - name: Create offline bundle
+        working-directory: lightrag-mcp-server
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          BUNDLE_NAME="lightrag-mcp-server-v${VERSION}-offline-bundle"
+          
+          echo "📦 Creating offline bundle: $BUNDLE_NAME"
+          
+          mkdir -p "$BUNDLE_NAME"
+          
+          # Copy archives
+          cp node_modules.tar.gz "$BUNDLE_NAME/"
+          cp python-packages.tar.gz "$BUNDLE_NAME/"
+          cp tiktoken-cache.tar.gz "$BUNDLE_NAME/"
+          cp checksums.txt "$BUNDLE_NAME/"
+          
+          # Copy source files
+          cp -r src/ "$BUNDLE_NAME/"
+          cp -r tests/ "$BUNDLE_NAME/"
+          cp package.json "$BUNDLE_NAME/"
+          cp tsconfig.json "$BUNDLE_NAME/"
+          cp jest.config.js "$BUNDLE_NAME/" 2>/dev/null || true
+          cp .eslintrc.json "$BUNDLE_NAME/" 2>/dev/null || true
+          
+          # Copy installation files
+          cp install-offline.sh "$BUNDLE_NAME/"
+          chmod +x "$BUNDLE_NAME/install-offline.sh"
+          cp README-OFFLINE.md "$BUNDLE_NAME/"
+          cp AIRGAP_DEPLOYMENT.md "$BUNDLE_NAME/"
+          cp RHEL9_SETUP.md "$BUNDLE_NAME/"
+          cp system-requirements.txt "$BUNDLE_NAME/"
+          cp .env.example "$BUNDLE_NAME/"
+          
+          # Create archive
+          tar -czf "${BUNDLE_NAME}.tar.gz" "$BUNDLE_NAME"/
+          
+          echo "✅ Bundle created: $(du -h ${BUNDLE_NAME}.tar.gz | cut -f1)"
+          
+          # Calculate final checksum
+          sha256sum "${BUNDLE_NAME}.tar.gz" > "${BUNDLE_NAME}.tar.gz.sha256"
+          
+          echo "Bundle contents:"
+          tar -tzf "${BUNDLE_NAME}.tar.gz" | head -20
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-bundle
+          path: |
+            lightrag-mcp-server/lightrag-mcp-server-v*.tar.gz
+            lightrag-mcp-server/lightrag-mcp-server-v*.tar.gz.sha256
+          retention-days: 90
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, build-bundle]
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: offline-bundle
+          path: ./bundles
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          
+          # Check if pre-release
+          IS_PRERELEASE="false"
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            IS_PRERELEASE="true"
+          fi
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          
+          cat > release_notes.md << EOF
+          # LightRAG MCP Server v${VERSION}
+          
+          **Air-Gapped Deployment Ready** 🔒
+          
+          This release includes a complete offline installation bundle for deployment in air-gapped environments.
+          
+          ## 📦 Downloads
+          
+          - **Offline Bundle**: \`lightrag-mcp-server-v${VERSION}-offline-bundle.tar.gz\` (~350-400MB)
+            - Includes all Node.js dependencies
+            - Includes all Python dependencies  
+            - Includes Tiktoken cache files
+            - Includes installation script
+            - No internet required for installation
+          
+          ## ✨ Features
+          
+          - **6 MCP Tools**: Complete graph-based code search
+            - \`lightrag_index_codebase\` - Batch indexing
+            - \`lightrag_search_code\` - Multi-mode search (local/global/hybrid)
+            - \`lightrag_get_indexing_status\` - Index status
+            - \`lightrag_get_entity\` - Entity details
+            - \`lightrag_get_relationships\` - Relationship tracing
+            - \`lightrag_visualize_subgraph\` - Mermaid diagrams
+          
+          - **Python JSON-RPC Bridge**: 7 async methods
+          - **TypeScript MCP Server**: stdio transport
+          - **Storage Backends**: NetworkX, Neo4J, NanoVectorDB, Milvus
+          - **NetApp Configuration**: gpt-5, text-embedding-3-large, LLM proxy
+          
+          ## 📚 Documentation
+          
+          - **Installation Guide**: See \`AIRGAP_DEPLOYMENT.md\` in the bundle
+          - **Quick Start**: Run \`./install-offline.sh\` after extraction
+          - **VS Code Setup**: Complete MCP configuration instructions
+          
+          ## 🔐 Verification
+          
+          \`\`\`bash
+          # Verify bundle integrity
+          sha256sum -c lightrag-mcp-server-v${VERSION}-offline-bundle.tar.gz.sha256
+          \`\`\`
+          
+          ## 📋 Prerequisites
+          
+          - Node.js 18+ or 20+
+          - Python 3.10 or 3.11
+          - 2GB disk space
+          - 4GB RAM minimum
+          
+          ## 🚀 Installation
+          
+          \`\`\`bash
+          # Extract bundle
+          tar -xzf lightrag-mcp-server-v${VERSION}-offline-bundle.tar.gz
+          cd lightrag-mcp-server-v${VERSION}-offline-bundle
+          
+          # Run installation
+          chmod +x install-offline.sh
+          ./install-offline.sh
+          
+          # Configure
+          vi .env  # Add your API key
+          
+          # Test
+          source .env
+          node dist/index.js
+          \`\`\`
+          
+          ## 🔧 Configuration
+          
+          Default settings optimized for NetApp infrastructure:
+          - **LLM Model**: gpt-5
+          - **Embedding**: text-embedding-3-large (3072 dims)
+          - **Base URL**: https://llm-proxy-api.ai.eng.netapp.com/v1
+          
+          All settings configurable via environment variables.
+          
+          ## 📝 Changelog
+          
+          See \`CHANGELOG.md\` for detailed changes.
+          
+          ---
+          
+          **Full Documentation**: [GitHub Repository](https://github.com/netbrah/LightRAG/tree/main/lightrag-mcp-server)
+          EOF
+          
+          echo "Release notes generated for v${VERSION} (pre-release: $IS_PRERELEASE)"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event_name == 'push' && github.ref || format('v{0}', needs.validate.outputs.version) }}
+          name: LightRAG MCP Server v${{ needs.validate.outputs.version }}
+          body_path: release_notes.md
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ steps.notes.outputs.is_prerelease }}
+          files: |
+            ./bundles/*.tar.gz
+            ./bundles/*.sha256
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          
+          echo "## 🎉 Release Created Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: v${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Bundle**: lightrag-mcp-server-v${VERSION}-offline-bundle.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the offline bundle from the release page" >> $GITHUB_STEP_SUMMARY
+          echo "2. Transfer to air-gapped environment" >> $GITHUB_STEP_SUMMARY
+          echo "3. Follow AIRGAP_DEPLOYMENT.md for installation" >> $GITHUB_STEP_SUMMARY

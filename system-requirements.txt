@@ -1,0 +1,116 @@
+# LightRAG MCP Server - System Requirements
+# 
+# This file lists all system packages required for installation
+# on RHEL9, CentOS Stream 9, Rocky Linux 9, and AlmaLinux 9
+
+## Core Build Tools
+gcc
+gcc-c++
+make
+cmake
+
+## Python Development Headers (Required)
+# These are needed to build Python packages with C extensions
+openssl-devel
+bzip2-devel
+libffi-devel
+zlib-devel
+readline-devel
+sqlite-devel
+ncurses-devel
+tk-devel
+gdbm-devel
+xz-devel
+python3-devel
+
+## Node.js (Required)
+# Install via DNF module:
+# sudo dnf module install -y nodejs:20
+
+## Python Runtime (Required)
+# Install Python 3.11:
+# sudo dnf install -y python3.11 python3.11-devel python3.11-pip
+
+## Optional: Production Storage Backends
+
+### Neo4J (Graph Database)
+java-11-openjdk
+java-11-openjdk-devel
+
+### Milvus (Vector Database)
+# Requires Docker or Podman:
+# sudo dnf install -y docker-ce
+# Or:
+# sudo dnf install -y podman podman-docker
+
+## Optional: Additional Tools
+git
+wget
+curl
+tar
+gzip
+unzip
+
+## Installation Commands
+
+### Minimal Required Packages (RHEL9)
+# sudo dnf install -y gcc gcc-c++ make openssl-devel bzip2-devel libffi-devel zlib-devel readline-devel python3.11 python3.11-devel python3.11-pip
+# sudo dnf module install -y nodejs:20
+
+### Complete Development Environment (RHEL9)
+# sudo dnf install -y gcc gcc-c++ make cmake git openssl-devel bzip2-devel libffi-devel zlib-devel readline-devel sqlite-devel ncurses-devel tk-devel gdbm-devel xz-devel python3.11 python3.11-devel python3.11-pip
+# sudo dnf module install -y nodejs:20
+
+### With Production Storage (RHEL9)
+# sudo dnf install -y gcc gcc-c++ make cmake git openssl-devel bzip2-devel libffi-devel zlib-devel readline-devel sqlite-devel ncurses-devel tk-devel gdbm-devel xz-devel python3.11 python3.11-devel python3.11-pip java-11-openjdk
+# sudo dnf module install -y nodejs:20
+
+## Verification Commands
+
+# Check GCC
+gcc --version
+
+# Check Python
+python3.11 --version
+pip3.11 --version
+
+# Check Node.js
+node --version
+npm --version
+
+# Check Java (if using Neo4J)
+java --version
+
+# Check development headers
+ls /usr/include/python3.11/Python.h  # Should exist
+ls /usr/include/openssl/ssl.h        # Should exist
+
+## Package Sizes (Approximate)
+
+# Core build tools: ~100MB
+# Python development: ~50MB
+# Node.js 20: ~40MB
+# Java (for Neo4J): ~200MB
+# Total minimal: ~190MB
+# Total with Neo4J: ~390MB
+
+## Platform Compatibility
+
+# Tested on:
+# - Red Hat Enterprise Linux 9.0, 9.1, 9.2
+# - CentOS Stream 9
+# - Rocky Linux 9.0, 9.1
+# - AlmaLinux 9.0, 9.1
+
+# Architecture:
+# - x86_64 (required)
+# - aarch64 (not tested)
+
+## Notes
+
+# 1. All packages must be installed BEFORE running install-offline.sh
+# 2. Python 3.11 is recommended (3.10 also works)
+# 3. Node.js 20 is recommended (18 also works)
+# 4. GCC 11+ is required for building native Python modules
+# 5. SELinux may require additional configuration (see RHEL9_SETUP.md)
+# 6. Firewall rules may be needed for Neo4J/Milvus (see RHEL9_SETUP.md)

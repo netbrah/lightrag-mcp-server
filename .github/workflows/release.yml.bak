@@ -1,0 +1,337 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0-alpha.1)'
+        required: true
+        type: string
+      create_tag:
+        description: 'Create git tag'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z or X.Y.Z-alpha.N"
+            exit 1
+          fi
+          
+          echo "✅ Valid version: $VERSION"
+
+      - name: Check changelog
+        run: |
+          if [[ ! -f "lightrag-mcp-server/CHANGELOG.md" ]]; then
+            echo "⚠️  No CHANGELOG.md found, creating one"
+            mkdir -p lightrag-mcp-server
+            cat > lightrag-mcp-server/CHANGELOG.md << EOF
+          # Changelog
+
+          ## [${{ env.VERSION }}] - $(date +%Y-%m-%d)
+
+          ### Added
+          - Initial release of LightRAG MCP Server
+          - Graph-based code search with 6 MCP tools
+          - Python JSON-RPC bridge
+          - TypeScript MCP server
+          - Comprehensive test suite
+
+          EOF
+          fi
+
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: lightrag-mcp-server/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: lightrag-mcp-server
+        run: |
+          npm ci
+          cd python
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install build twine
+
+      - name: Run tests
+        working-directory: lightrag-mcp-server
+        run: |
+          npm run build
+          npm run test:unit
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'test-key' }}
+
+      - name: Build TypeScript package
+        working-directory: lightrag-mcp-server
+        run: npm run build
+
+      - name: Build Python package
+        working-directory: lightrag-mcp-server/python
+        run: python -m build
+
+      - name: Upload NPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: |
+            lightrag-mcp-server/dist/
+            lightrag-mcp-server/package.json
+            lightrag-mcp-server/README.md
+          retention-days: 30
+
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: lightrag-mcp-server/python/dist/
+          retention-days: 30
+
+  publish-npm:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    needs: build-test
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_tag == 'true')
+    environment: npm-release
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: lightrag-mcp-server/package-lock.json
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: lightrag-mcp-server/
+
+      - name: Update package version
+        working-directory: lightrag-mcp-server
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Publish to NPM (dry run)
+        working-directory: lightrag-mcp-server
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to NPM
+        working-directory: lightrag-mcp-server
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "⚠️  Skipping actual NPM publish for manual workflow"
+            echo "✅ Dry run successful"
+          else
+            npm publish --access public
+            echo "✅ Published to NPM"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: build-test
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_tag == 'true')
+    environment: pypi-release
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: lightrag-mcp-server/python/dist/
+
+      - name: Install twine
+        run: pip install twine
+
+      - name: Check package
+        working-directory: lightrag-mcp-server/python
+        run: twine check dist/*
+
+      - name: Publish to PyPI (dry run)
+        working-directory: lightrag-mcp-server/python
+        run: |
+          echo "⚠️  Skipping actual PyPI publish (would use: twine upload dist/*)"
+          echo "✅ Package check passed"
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [publish-npm, publish-pypi]
+    if: always() && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download NPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: npm-artifacts/
+
+      - name: Download Python artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: python-artifacts/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          
+          cat > release_notes.md << EOF
+          # LightRAG MCP Server v${VERSION}
+
+          ## 🚀 Features
+
+          ### MCP Tools (6 total)
+          - **lightrag_index_codebase**: Batch file indexing
+          - **lightrag_search_code**: Multi-mode graph retrieval (local/global/hybrid/mix/naive)
+          - **lightrag_get_indexing_status**: Index metadata
+          - **lightrag_get_entity**: Entity details extraction
+          - **lightrag_get_relationships**: Relationship traversal (depth 1-3)
+          - **lightrag_visualize_subgraph**: Mermaid diagram generation
+
+          ### Architecture
+          - Python JSON-RPC bridge (7 methods)
+          - TypeScript MCP server with stdio transport
+          - Storage backends: NetworkX/Neo4J + NanoVectorDB/Milvus
+          - Health monitoring and auto-restart
+          - Comprehensive test suite (25+ tests)
+
+          ## 📦 Installation
+
+          ### NPM
+          \`\`\`bash
+          npm install -g lightrag-mcp-server
+          \`\`\`
+
+          ### From Source
+          \`\`\`bash
+          git clone https://github.com/netbrah/LightRAG.git
+          cd LightRAG/lightrag-mcp-server
+          npm install
+          npm run build
+          \`\`\`
+
+          ## 🔧 Configuration
+
+          Add to \`.vscode/mcp.json\`:
+          \`\`\`json
+          {
+            "servers": {
+              "lightrag": {
+                "command": "lightrag-mcp-server",
+                "env": {
+                  "OPENAI_API_KEY": "your-key",
+                  "LIGHTRAG_WORKING_DIR": "\${workspaceFolder}/.lightrag"
+                }
+              }
+            }
+          }
+          \`\`\`
+
+          ## 📊 Performance
+          - Indexing: ~100 files/min
+          - Local search: <2s (P95)
+          - Global search: <5s (P95)
+          - Visualization: <10s
+
+          ## 🐛 Known Issues
+          - Integration tests require valid OpenAI API key
+          - Neo4J/Milvus optional but recommended for production
+
+          ## 📝 Changelog
+          See [CHANGELOG.md](https://github.com/netbrah/LightRAG/blob/main/lightrag-mcp-server/CHANGELOG.md)
+
+          ## 🙏 Credits
+          - Built on [LightRAG](https://github.com/HKUDS/LightRAG) by HKUDS
+          - MCP SDK by Anthropic
+          EOF
+
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event_name == 'push' && github.ref || format('v{0}', github.event.inputs.version) }}
+          name: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', github.event.inputs.version) }}
+          body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          files: |
+            npm-artifacts/**/*
+            python-artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

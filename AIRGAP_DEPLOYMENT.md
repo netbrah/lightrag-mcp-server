@@ -44,11 +44,46 @@ Air-Gapped Environment
 
 ### System Requirements
 
-- **Operating System**: Linux, macOS, or Windows WSL2
+- **Operating System**: RHEL 9.x, Rocky Linux 9, AlmaLinux 9, Ubuntu 20.04+, Debian 11+
 - **Python**: 3.10 or 3.11
 - **Node.js**: 18 or 20
 - **Memory**: 4GB minimum, 8GB recommended
 - **Disk Space**: 10GB free space
+
+### RHEL9-Specific Preparation
+
+If deploying on Red Hat Enterprise Linux 9.x, Rocky Linux 9, or AlmaLinux 9, install system packages FIRST:
+
+```bash
+# Install core build tools
+sudo dnf install -y gcc gcc-c++ make
+
+# Install Python development headers (required)
+sudo dnf install -y \
+    openssl-devel \
+    bzip2-devel \
+    libffi-devel \
+    zlib-devel \
+    readline-devel \
+    python3-devel
+
+# Install Python 3.11 (recommended)
+sudo dnf install -y python3.11 python3.11-devel python3.11-pip
+
+# Install Node.js 20
+sudo dnf module install -y nodejs:20
+
+# Verify installations
+gcc --version        # Should be 11.x or higher
+python3.11 --version # Should be 3.11.x
+node --version       # Should be v20.x.x
+```
+
+**See `RHEL9_SETUP.md` for complete RHEL9-specific setup guide, including:**
+- Subscription manager configuration
+- SELinux setup
+- Firewall rules
+- Troubleshooting RHEL9-specific issues
 
 ### Required Tools (Pre-installed in Air-Gapped Environment)
 
