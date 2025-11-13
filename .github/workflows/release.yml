@@ -2,13 +2,15 @@ name: Release - Air-Gapped Bundle
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       version:
         description: 'Version to release (e.g., 0.1.0-alpha.1)'
-        required: true
+        required: false
         type: string
       create_tag:
         description: 'Create git tag'
@@ -27,25 +29,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for version calculation
 
       - name: Get version
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            # Tagged release
             VERSION="${GITHUB_REF#refs/tags/v}"
-          else
+            echo "📌 Using tag version: $VERSION"
+          elif [[ "${{ github.event.inputs.version }}" != "" ]]; then
+            # Manual workflow dispatch with version
             VERSION="${{ github.event.inputs.version }}"
+            echo "📌 Using manual version: $VERSION"
+          else
+            # Auto-generate version from package.json + commit info
+            BASE_VERSION=$(grep -oP '(?<="version": ")[^"]*' package.json)
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            VERSION="${BASE_VERSION}-dev.${SHORT_SHA}.${TIMESTAMP}"
+            echo "📌 Auto-generated version: $VERSION"
           fi
           
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "❌ Invalid version format: $VERSION"
-            exit 1
-          fi
-          
-          echo "✅ Valid version: $VERSION"
+          echo "✅ Version: $VERSION"
 
   build-bundle:
     name: Build Air-Gapped Bundle
@@ -410,15 +420,22 @@ jobs:
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
           
-          # Check if pre-release
-          IS_PRERELEASE="false"
-          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
-            IS_PRERELEASE="true"
+          # Determine release type
+          if [[ "$VERSION" =~ -dev\. ]]; then
+            RELEASE_TYPE="🔧 Development Build (Auto-generated from main branch)"
+            IS_AUTO="true"
+          elif [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            RELEASE_TYPE="🧪 Pre-release"
+            IS_AUTO="false"
+          else
+            RELEASE_TYPE="✨ Stable Release"
+            IS_AUTO="false"
           fi
-          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
           
           cat > release_notes.md << EOF
           # LightRAG MCP Server v${VERSION}
+          
+          ${RELEASE_TYPE}
           
           **Air-Gapped Deployment Ready** 🔒
           
@@ -510,11 +527,11 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event_name == 'push' && github.ref || format('v{0}', needs.validate.outputs.version) }}
+          tag_name: v${{ needs.validate.outputs.version }}
           name: LightRAG MCP Server v${{ needs.validate.outputs.version }}
           body_path: release_notes.md
-          draft: ${{ github.event_name == 'workflow_dispatch' }}
-          prerelease: ${{ steps.notes.outputs.is_prerelease }}
+          draft: false
+          prerelease: true  # Auto-generated releases from main are pre-releases
           files: |
             ./bundles/*.tar.gz
             ./bundles/*.sha256
