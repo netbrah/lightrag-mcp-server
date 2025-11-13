@@ -2,6 +2,7 @@ import { LightRAGBridge, BridgeConfig } from '../../src/lightrag-bridge.js';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
+import { jest } from '@jest/globals';
 
 // Mock child_process
 jest.mock('child_process');
@@ -31,9 +32,9 @@ describe('LightRAGBridge', () => {
     // Create mock process
     mockProcess = new EventEmitter();
     mockProcess.stdin = {
-      write: jest.fn((data, callback) => {
+      write: jest.fn((data: any, callback?: () => void) => {
         if (callback) callback();
-      }),
+      }) as any,
     };
     // Use proper Readable streams for stdout/stderr
     mockProcess.stdout = createMockReadable();
