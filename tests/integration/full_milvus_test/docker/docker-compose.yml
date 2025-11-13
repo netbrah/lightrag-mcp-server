@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   milvus-standalone:
     image: milvusdb/milvus:v2.3.3
