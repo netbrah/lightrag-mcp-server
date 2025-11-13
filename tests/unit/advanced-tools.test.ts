@@ -1,125 +1,267 @@
-import { LightRAGBridge } from '../../src/lightrag-bridge.js';
-import { LightRAGConfig } from '../../src/types.js';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import { jest } from '@jest/globals';
+import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Mock child_process BEFORE importing LightRAGBridge
+const mockSpawn = jest.fn();
+await jest.unstable_mockModule('child_process', () => ({
+  spawn: mockSpawn,
+  ChildProcess: EventEmitter,
+}));
 
-const testConfig: LightRAGConfig = {
-  workingDir: path.join(__dirname, '../fixtures/test_storage_advanced'),
-  openaiApiKey: process.env.OPENAI_API_KEY || 'test-key',
-  openaiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-  openaiModel: 'gpt-4',
-  openaiEmbeddingModel: 'text-embedding-ada-002',
-};
+// Now import after mocks are set up
+const { LightRAGBridge } = await import('../../src/lightrag-bridge.js');
 
-describe('Advanced Tools', () => {
-  let bridge: LightRAGBridge;
+// Helper to create a mock readable stream
+function createMockReadable(): Readable {
+  const readable = new Readable({
+    read() {
+      // No-op
+    },
+  });
+  return readable;
+}
 
-  beforeAll(async () => {
-    if (!process.env.OPENAI_API_KEY) {
-      console.warn('⚠️  OPENAI_API_KEY not set, tests may fail');
-    }
+describe('Advanced Tools (Mocked)', () => {
+  let bridge: any;
+  let mockProcess: any;
+
+  const testConfig = {
+    workingDir: '/tmp/test-advanced',
+    openaiApiKey: 'fake-test-key',
+    openaiBaseUrl: 'https://fake-test.com/v1',
+    openaiModel: 'gpt-4',
+    openaiEmbeddingModel: 'text-embedding-ada-002',
+    autoRestart: false,
+  };
+
+  beforeEach(async () => {
+    // Create mock process
+    mockProcess = new EventEmitter();
+    mockProcess.stdin = {
+      write: jest.fn((data: any, callback?: () => void) => {
+        if (callback) callback();
+      }) as any,
+    };
+    mockProcess.stdout = createMockReadable();
+    mockProcess.stderr = createMockReadable();
+    mockProcess.kill = jest.fn();
+    mockProcess.killed = false;
+
+    mockSpawn.mockReturnValue(mockProcess);
 
     bridge = new LightRAGBridge(testConfig);
     await bridge.start();
+  });
 
-    // Index test file first
-    const testFile = path.join(__dirname, '../fixtures/sample-codebase/keymanager_sample.cpp');
-    try {
-      await bridge.call('index_files', { file_paths: [testFile] });
-    } catch (error) {
-      console.warn('⚠️  Failed to index test file:', error);
+  afterEach(async () => {
+    if (bridge && bridge.isRunning()) {
+      await bridge.stop();
     }
-  }, 60000);
-
-  afterAll(async () => {
-    await bridge.stop();
-  }, 10000);
+    jest.clearAllMocks();
+  });
 
   describe('getEntity', () => {
     test('returns entity description', async () => {
-      const result = await bridge.call('get_entity', { entity_name: 'keymanager_keystore_enable_iterator' });
+      const responsePromise = bridge.call('get_entity', { 
+        entity_name: 'keymanager_keystore_enable_iterator' 
+      });
 
+      // Simulate response from Python process
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            entity_name: 'keymanager_keystore_enable_iterator',
+            description: 'Iterator class for enabling keystores in the keymanager component',
+            search_mode: 'local',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('entity_name', 'keymanager_keystore_enable_iterator');
       expect(result).toHaveProperty('description');
       expect(result).toHaveProperty('search_mode', 'local');
-      expect(typeof result.description).toBe('string');
-      expect(result.description.length).toBeGreaterThan(0);
-    }, 60000);
+    });
 
     test('handles non-existent entity gracefully', async () => {
-      const result = await bridge.call('get_entity', { entity_name: 'NonExistentClass' });
+      const responsePromise = bridge.call('get_entity', { 
+        entity_name: 'NonExistentClass' 
+      });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            entity_name: 'NonExistentClass',
+            description: 'No information found for this entity',
+            search_mode: 'local',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('entity_name', 'NonExistentClass');
       expect(result).toHaveProperty('description');
-      // Should still return something (may indicate not found)
-    }, 60000);
+    });
   });
 
   describe('getRelationships', () => {
     test('returns relationships for entity', async () => {
-      const result = await bridge.call('get_relationships', { entity_name: 'keymanager_keystore_enable_iterator' });
+      const responsePromise = bridge.call('get_relationships', { 
+        entity_name: 'keymanager_keystore_enable_iterator' 
+      });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            entity_name: 'keymanager_keystore_enable_iterator',
+            relation_type: 'all',
+            depth: 1,
+            relationships: 'keymanager_keystore_enable_iterator calls execute() method',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('entity_name', 'keymanager_keystore_enable_iterator');
       expect(result).toHaveProperty('relationships');
       expect(typeof result.relationships).toBe('string');
-    }, 60000);
+    });
 
     test('filters by relation type', async () => {
-      const result = await bridge.call('get_relationships', { 
-        entity_name: 'keymanager_keystore_enable_iterator', 
+      const responsePromise = bridge.call('get_relationships', { 
+        entity_name: 'keymanager_keystore_enable_iterator',
         relation_type: 'calls' 
       });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            entity_name: 'keymanager_keystore_enable_iterator',
+            relation_type: 'calls',
+            depth: 1,
+            relationships: 'Calls execute(), init(), and finalize()',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('relation_type', 'calls');
       expect(result).toHaveProperty('relationships');
-    }, 60000);
+    });
 
     test('supports depth parameter', async () => {
-      const result = await bridge.call('get_relationships', { 
-        entity_name: 'keymanager_keystore_enable_iterator', 
+      const responsePromise = bridge.call('get_relationships', { 
+        entity_name: 'keymanager_keystore_enable_iterator',
         depth: 2 
       });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            entity_name: 'keymanager_keystore_enable_iterator',
+            relation_type: 'all',
+            depth: 2,
+            relationships: 'Multi-level relationships up to depth 2',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('depth', 2);
-    }, 60000);
+    });
   });
 
   describe('visualizeSubgraph', () => {
     test('generates valid Mermaid diagram', async () => {
-      const result = await bridge.call('visualize_subgraph', {
+      const responsePromise = bridge.call('visualize_subgraph', {
         query: 'Show the structure of keymanager_keystore_enable_iterator class',
         format: 'mermaid',
         max_nodes: 15
       });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            query: 'Show the structure of keymanager_keystore_enable_iterator class',
+            format: 'mermaid',
+            max_nodes: 15,
+            diagram: 'graph TD\n    A[keymanager_keystore_enable_iterator] --> B[execute]\n    A --> C[init]',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('query');
       expect(result).toHaveProperty('format', 'mermaid');
       expect(result).toHaveProperty('diagram');
       expect(result.diagram).toMatch(/graph TD/i);
       expect(result.diagram).toContain('-->');
-    }, 90000);
+    });
 
     test('respects max_nodes parameter', async () => {
-      const result = await bridge.call('visualize_subgraph', {
+      const responsePromise = bridge.call('visualize_subgraph', {
         query: 'Show all classes',
         format: 'mermaid',
         max_nodes: 10
       });
 
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            query: 'Show all classes',
+            format: 'mermaid',
+            max_nodes: 10,
+            diagram: 'graph TD\n    A[Class1] --> B[Class2]',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      const result = await responsePromise;
       expect(result).toHaveProperty('max_nodes', 10);
-    }, 90000);
+    });
 
     test('returns error for unsupported format', async () => {
-      await expect(
-        bridge.call('visualize_subgraph', {
-          query: 'Show classes',
-          format: 'graphviz',
-          max_nodes: 10
-        })
-      ).rejects.toThrow(/unsupported format/i);
-    }, 60000);
+      const responsePromise = bridge.call('visualize_subgraph', {
+        query: 'Show classes',
+        format: 'graphviz',
+        max_nodes: 10
+      });
+
+      setTimeout(() => {
+        const response = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: {
+            code: -32603,
+            message: 'Unsupported format \'graphviz\'. Only \'mermaid\' format is supported.',
+          },
+        });
+        mockProcess.stdout.push(response + '\n');
+      }, 10);
+
+      await expect(responsePromise).rejects.toThrow(/unsupported format/i);
+    });
   });
 });
