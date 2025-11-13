@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  milvus-standalone:
+    image: milvusdb/milvus:v2.3.3
+    container_name: milvus-standalone-test
+    environment:
+      - ETCD_USE_EMBED=true
+      - COMMON_STORAGETYPE=local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - ./milvus_data:/var/lib/milvus
+    command: milvus run standalone
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

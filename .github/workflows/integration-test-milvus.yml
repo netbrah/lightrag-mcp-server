@@ -1,0 +1,106 @@
+name: Full Integration Test - Milvus
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  integration-test-milvus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    services:
+      milvus:
+        image: milvusdb/milvus:v2.3.3
+        ports:
+          - 19530:19530
+          - 9091:9091
+        env:
+          ETCD_USE_EMBED: "true"
+          COMMON_STORAGETYPE: local
+        options: >-
+          --health-cmd "curl -f http://localhost:9091/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pymilvus numpy
+          pip install lightrag-hku
+      
+      - name: Install Node dependencies
+        run: |
+          npm ci
+          npm run build
+      
+      - name: Wait for Milvus to be ready
+        run: |
+          echo "Waiting for Milvus to be ready..."
+          for i in {1..60}; do
+            if curl -f http://localhost:9091/healthz > /dev/null 2>&1; then
+              echo "✓ Milvus is ready!"
+              sleep 5  # Extra wait for full initialization
+              exit 0
+            fi
+            echo "Waiting... ($i/60)"
+            sleep 2
+          done
+          echo "✗ Milvus failed to start in time"
+          exit 1
+      
+      - name: Verify Milvus connection
+        run: |
+          python -c "
+          from pymilvus import connections, utility
+          connections.connect(host='localhost', port='19530')
+          version = utility.get_server_version()
+          print(f'Connected to Milvus version: {version}')
+          connections.disconnect('default')
+          "
+      
+      - name: Run integration tests
+        working-directory: ./tests/integration/full_milvus_test
+        run: |
+          pytest test_full_integration.py -v -s --tb=short
+        env:
+          MILVUS_URI: http://localhost:19530
+      
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            tests/integration/full_milvus_test/rag_storage/
+            tests/integration/full_milvus_test/pytest-*.log
+          retention-days: 7
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            tests/integration/full_milvus_test/.pytest_cache/
+          retention-days: 7
