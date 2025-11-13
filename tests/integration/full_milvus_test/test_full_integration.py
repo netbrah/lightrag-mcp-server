@@ -147,7 +147,7 @@ async def lightrag_instance(
     working_dir.mkdir(exist_ok=True)
     
     try:
-        # Create a simple mock tokenizer to avoid network calls
+        # Create a simple mock tokenizer object to avoid network calls
         class SimpleTokenizer:
             """Simple word-based tokenizer that doesn't require network access."""
             def encode(self, text: str) -> list:
@@ -156,10 +156,10 @@ async def lightrag_instance(
             
             def decode(self, tokens: list) -> str:
                 return " ".join(str(t) for t in tokens)
-        
-        def simple_tokenizer_len(text: str) -> int:
-            """Count tokens using simple word splitting."""
-            return len(text.split())
+            
+            def __call__(self, text: str) -> int:
+                """Callable interface for token counting."""
+                return len(text.split())
         
         tokenizer = SimpleTokenizer()
         
@@ -168,7 +168,7 @@ async def lightrag_instance(
             llm_model_func=mock_complete,
             embedding_func=mock_embed,
             llm_model_name="gpt-4-turbo-preview",  # Mock model name
-            tokenizer=simple_tokenizer_len,
+            tokenizer=tokenizer,
             chunk_token_size=512,
             chunk_overlap_token_size=50,
             # Milvus configuration

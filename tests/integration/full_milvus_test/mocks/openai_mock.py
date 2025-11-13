@@ -54,53 +54,65 @@ class MockOpenAIResponse:
         entities = []
         relationships = []
         
-        # Look for common code patterns
-        if "reversestring" in prompt.lower():
+        # Look for common code patterns - check the actual content
+        prompt_lower = prompt.lower()
+        
+        # Extract entities based on content  
+        if "reversestring" in prompt_lower or "reverse" in prompt_lower:
             entities.append({
                 "entity_name": "reverseString",
                 "entity_type": "function",
-                "description": "Function that reverses a string using STL algorithms",
+                "description": "Function that reverses a string using STL algorithms. Takes a string and returns it reversed.",
                 "source_id": "utils.cpp"
             })
         
-        if "touppercase" in prompt.lower():
+        if "touppercase" in prompt_lower or "uppercase" in prompt_lower or "toupper" in prompt_lower:
             entities.append({
                 "entity_name": "toUpperCase",
                 "entity_type": "function",
-                "description": "Function that converts a string to uppercase",
+                "description": "Function that converts a string to uppercase using std::transform",
                 "source_id": "utils.cpp"
             })
         
-        if "tolowercase" in prompt.lower():
+        if "tolowercase" in prompt_lower or "lowercase" in prompt_lower or "tolower" in prompt_lower:
             entities.append({
                 "entity_name": "toLowerCase",
                 "entity_type": "function",
-                "description": "Function that converts a string to lowercase",
+                "description": "Function that converts a string to lowercase using std::transform",
                 "source_id": "utils.cpp"
             })
         
-        if "ispalindrome" in prompt.lower():
+        if "ispalindrome" in prompt_lower or "palindrome" in prompt_lower:
             entities.append({
                 "entity_name": "isPalindrome",
                 "entity_type": "function",
-                "description": "Function that checks if a string is a palindrome",
+                "description": "Function that checks if a string is a palindrome by comparing with reversed version",
                 "source_id": "utils.cpp"
             })
         
-        if "main" in prompt.lower() and "main.cpp" in prompt:
+        if "main" in prompt_lower or "entry" in prompt_lower:
             entities.append({
                 "entity_name": "main",
                 "entity_type": "function",
-                "description": "Main entry point for the StringProcessor application",
+                "description": "Main entry point for the StringProcessor application. Handles command line input and demonstrates string operations.",
                 "source_id": "main.cpp"
             })
         
-        if "stringprocessor" in prompt.lower():
+        if "stringprocessor" in prompt_lower or "application" in prompt_lower:
             entities.append({
                 "entity_name": "StringProcessor",
                 "entity_type": "application",
-                "description": "Main application for string manipulation operations",
+                "description": "Main application for string manipulation operations including reverse, case conversion, and palindrome checking",
                 "source_id": "main.cpp"
+            })
+        
+        # Add generic utils entity
+        if "util" in prompt_lower or not entities:
+            entities.append({
+                "entity_name": "StringUtils",
+                "entity_type": "module",
+                "description": "Utility module containing string manipulation functions",
+                "source_id": "utils.cpp"
             })
         
         # Generate relationships
@@ -112,10 +124,19 @@ class MockOpenAIResponse:
                         relationships.append({
                             "src_id": "main",
                             "tgt_id": entity["entity_name"],
-                            "description": f"main function calls {entity['entity_name']}",
-                            "keywords": "function_call,dependency",
+                            "description": f"main function calls {entity['entity_name']} for string manipulation",
+                            "keywords": "function_call,dependency,usage",
                             "weight": 0.9
                         })
+        
+        # Always create at least one entity to ensure data is stored
+        if not entities:
+            entities.append({
+                "entity_name": "code_content",
+                "entity_type": "content",
+                "description": "Source code content with string manipulation functionality",
+                "source_id": "source"
+            })
         
         result = {
             "entities": entities,
