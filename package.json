@@ -16,7 +16,8 @@
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest tests/integration",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "lint": "eslint src/**/*.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "bundle:offline": "./create-offline-bundle.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.1"
