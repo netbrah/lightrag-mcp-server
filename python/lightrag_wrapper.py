@@ -238,6 +238,10 @@ class LightRAGWrapper:
         
         logger.info(f"Visualizing: query='{query}', format={format}, max_nodes={max_nodes}")
         
+        # Validate format
+        if format != "mermaid":
+            raise ValueError(f"Unsupported format '{format}'. Only 'mermaid' format is supported.")
+        
         # Get entities and relationships
         result = await self.rag.aquery(
             f"{query}. List all entities and their relationships.",
