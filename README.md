@@ -30,6 +30,20 @@ npm run build
 node dist/index.js
 ```
 
+## Offline Installation
+
+For air-gapped or offline environments, create a standalone installation bundle:
+
+```bash
+# Create offline bundle
+npm run bundle:offline
+
+# This creates: lightrag-mcp-server-{version}-offline-bundle.tar.gz
+# Transfer this file to your offline environment and follow instructions in:
+# - AIRGAP_DEPLOYMENT.md - Complete deployment guide
+# - README-OFFLINE.md - Quick installation steps
+```
+
 ## VS Code Integration
 
 Create `.vscode/mcp.json`:
