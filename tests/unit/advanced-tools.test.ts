@@ -105,18 +105,17 @@ describe('Advanced Tools', () => {
         max_nodes: 10
       });
 
-      expect(result).toHaveProperty('node_count', 10);
+      expect(result).toHaveProperty('max_nodes', 10);
     }, 90000);
 
     test('returns error for unsupported format', async () => {
-      const result = await bridge.call('visualize_subgraph', {
-        query: 'Show classes',
-        format: 'graphviz',
-        max_nodes: 10
-      });
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('mermaid');
+      await expect(
+        bridge.call('visualize_subgraph', {
+          query: 'Show classes',
+          format: 'graphviz',
+          max_nodes: 10
+        })
+      ).rejects.toThrow(/unsupported format/i);
     }, 60000);
   });
 });
