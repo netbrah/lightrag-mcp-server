@@ -15,6 +15,7 @@ import subprocess
 import time
 from pathlib import Path
 import pytest
+import pytest_asyncio
 import json
 import sys
 from typing import AsyncGenerator
@@ -61,12 +62,21 @@ def milvus_container(test_root: Path):
     
     print("\n🐳 Starting Milvus container...")
     try:
-        subprocess.run(
-            ["docker-compose", "up", "-d"],
-            cwd=docker_path,
-            check=True,
-            capture_output=True
-        )
+        # Try docker compose v2 first, then v1
+        try:
+            subprocess.run(
+                ["docker", "compose", "up", "-d"],
+                cwd=docker_path,
+                check=True,
+                capture_output=True
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            subprocess.run(
+                ["docker-compose", "up", "-d"],
+                cwd=docker_path,
+                check=True,
+                capture_output=True
+            )
     except subprocess.CalledProcessError as e:
         print(f"Failed to start Milvus: {e.stderr.decode()}")
         pytest.skip("Could not start Milvus container")
@@ -100,14 +110,21 @@ def milvus_container(test_root: Path):
     
     # Cleanup
     print("\n🧹 Stopping Milvus container...")
-    subprocess.run(
-        ["docker-compose", "down", "-v"],
-        cwd=docker_path,
-        capture_output=True
-    )
+    try:
+        subprocess.run(
+            ["docker", "compose", "down", "-v"],
+            cwd=docker_path,
+            capture_output=True
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        subprocess.run(
+            ["docker-compose", "down", "-v"],
+            cwd=docker_path,
+            capture_output=True
+        )
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(scope="function")
 async def lightrag_instance(
     test_root: Path,
     milvus_container
@@ -130,20 +147,46 @@ async def lightrag_instance(
     working_dir.mkdir(exist_ok=True)
     
     try:
+        # Create a simple mock tokenizer to avoid network calls
+        class SimpleTokenizer:
+            """Simple word-based tokenizer that doesn't require network access."""
+            def encode(self, text: str) -> list:
+                # Simple word-based tokenization
+                return text.split()
+            
+            def decode(self, tokens: list) -> str:
+                return " ".join(str(t) for t in tokens)
+        
+        def simple_tokenizer_len(text: str) -> int:
+            """Count tokens using simple word splitting."""
+            return len(text.split())
+        
+        tokenizer = SimpleTokenizer()
+        
         rag = LightRAG(
             working_dir=str(working_dir),
             llm_model_func=mock_complete,
             embedding_func=mock_embed,
             llm_model_name="gpt-4-turbo-preview",  # Mock model name
-            embedding_dim=1536,
+            tokenizer=simple_tokenizer_len,
             chunk_token_size=512,
             chunk_overlap_token_size=50,
             # Milvus configuration
             vector_storage="MilvusVectorDBStorage",
+            vector_db_storage_cls_kwargs={
+                "embedding_dim": 1536,
+            }
         )
         
         # Set environment variable for Milvus
         os.environ["MILVUS_URI"] = "http://localhost:19530"
+        
+        # Initialize storages
+        await rag.initialize_storages()
+        
+        # Initialize pipeline status
+        from lightrag.kg.shared_storage import initialize_pipeline_status
+        await initialize_pipeline_status()
         
         print("✓ LightRAG instance created with Milvus backend")
         

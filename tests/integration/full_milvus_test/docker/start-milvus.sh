@@ -3,8 +3,15 @@ set -e
 
 echo "Starting Milvus standalone container..."
 
-# Start docker-compose
-docker-compose up -d
+# Start docker compose (try v2 then v1)
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    docker compose up -d
+elif command -v docker-compose &> /dev/null; then
+    docker-compose up -d
+else
+    echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+    exit 1
+fi
 
 # Wait for Milvus to be ready
 echo "Waiting for Milvus to be ready..."

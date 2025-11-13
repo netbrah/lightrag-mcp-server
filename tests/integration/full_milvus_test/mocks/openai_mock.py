@@ -239,4 +239,7 @@ def patch_openai_for_lightrag():
             texts = [texts]
         return await mock_client.mock_embed(texts)
     
+    # Add embedding_dim attribute for Milvus compatibility
+    openai_embed.embedding_dim = 1536
+    
     return mock_client, openai_complete_if_cache, openai_embed

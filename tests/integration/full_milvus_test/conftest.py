@@ -4,6 +4,7 @@ pytest configuration for full integration tests.
 
 import sys
 from pathlib import Path
+import pytest
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -34,3 +35,7 @@ def pytest_collection_modifyitems(config, items):
         item.add_marker("integration")
         item.add_marker("milvus")
         item.add_marker("slow")
+
+
+# Configure pytest-asyncio
+pytest_plugins = ('pytest_asyncio',)
