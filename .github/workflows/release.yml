@@ -214,6 +214,8 @@ jobs:
     name: Test Offline Bundle Installation
     runs-on: ubuntu-latest
     needs: [validate, build-bundle]
+    permissions:
+      contents: read
     
     steps:
       - name: Setup Node.js
