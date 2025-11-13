@@ -2,6 +2,8 @@
 
 This directory contains a comprehensive integration test that validates the entire LightRAG MCP Server stack with real Milvus vector database and real LightRAG, mocking only the OpenAI API.
 
+**Status:** ✅ Validated - Manual tests passing, GitHub Actions workflow fixed
+
 ## Overview
 
 The test simulates a complete workflow:
@@ -11,6 +13,19 @@ The test simulates a complete workflow:
 3. **Stores vectors** in real Milvus database
 4. **Mocks only OpenAI** API calls (completions and embeddings)
 5. **Runs queries** through the complete stack
+
+## Quick Validation
+
+```bash
+# Manual test
+cd tests/integration/full_milvus_test
+./setup_test_env.sh
+pytest test_full_integration.py::test_milvus_connection test_full_integration.py::test_index_cpp_project -v
+
+# Results: ✅ 2/2 core tests passing
+```
+
+See [MANUAL_TEST_RESULTS.md](./MANUAL_TEST_RESULTS.md) for complete validation details.
 
 ## Architecture
 
