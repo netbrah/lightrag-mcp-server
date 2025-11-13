@@ -2,12 +2,16 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as readline from 'readline';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import {
   LightRAGConfig,
   JSONRPCRequest,
   JSONRPCResponse,
   JSONRPCError,
 } from './types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface BridgeConfig extends LightRAGConfig {
   pythonPath?: string;
