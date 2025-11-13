@@ -67,28 +67,24 @@ class LightRAGWrapper:
         storage_kwargs = {}
         
         # Configure graph storage
+        # Note: Neo4JStorage reads configuration from environment variables
+        # (NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD) which are already set by the bridge
         if self.neo4j_uri and self.neo4j_password:
             try:
                 from lightrag.kg.neo4j_impl import Neo4JStorage
                 logger.info("Using Neo4J for graph storage")
                 storage_kwargs["graph_storage"] = "Neo4JStorage"
-                storage_kwargs["neo4j_config"] = {
-                    "uri": self.neo4j_uri,
-                    "username": self.neo4j_username,
-                    "password": self.neo4j_password
-                }
             except ImportError:
                 logger.warning("Neo4J libraries not available, falling back to NetworkX")
         
         # Configure vector storage
+        # Note: MilvusVectorDBStorage reads configuration from environment variables
+        # (MILVUS_ADDRESS) which is already set by the bridge
         if self.milvus_address:
             try:
                 from lightrag.kg.milvus_impl import MilvusVectorDBStorage
                 logger.info("Using Milvus for vector storage")
                 storage_kwargs["vector_storage"] = "MilvusVectorDBStorage"
-                storage_kwargs["milvus_config"] = {
-                    "address": self.milvus_address
-                }
             except ImportError:
                 logger.warning("Milvus libraries not available, falling back to NanoVectorDB")
         
