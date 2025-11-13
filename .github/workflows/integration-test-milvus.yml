@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
+    permissions:
+      contents: read
+      actions: read
+    
     services:
       milvus:
         image: milvusdb/milvus:v2.3.3
