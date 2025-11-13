@@ -430,7 +430,7 @@ async def main():
         "openai_base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         "openai_model": os.environ.get("OPENAI_MODEL", "gpt-4"),
         "openai_embedding_model": os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002"),
-        "milvus_address": os.environ.get("MILVUS_ADDRESS"),
+        "milvus_address": os.environ.get("MILVUS_URI"),
         "neo4j_uri": os.environ.get("NEO4J_URI"),
         "neo4j_username": os.environ.get("NEO4J_USERNAME", "neo4j"),
         "neo4j_password": os.environ.get("NEO4J_PASSWORD"),

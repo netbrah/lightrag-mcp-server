@@ -77,7 +77,7 @@ export class LightRAGBridge extends EventEmitter {
       };
       
       if (this.config.milvusAddress) {
-        env.MILVUS_ADDRESS = this.config.milvusAddress;
+        env.MILVUS_URI = this.config.milvusAddress;
       }
       if (this.config.neo4jUri) {
         env.NEO4J_URI = this.config.neo4jUri;
