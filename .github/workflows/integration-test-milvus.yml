@@ -16,21 +16,6 @@ jobs:
       contents: read
       actions: read
     
-    services:
-      milvus:
-        image: milvusdb/milvus:v2.3.3
-        ports:
-          - 19530:19530
-          - 9091:9091
-        env:
-          ETCD_USE_EMBED: "true"
-          COMMON_STORAGETYPE: local
-        options: >-
-          --health-cmd "curl -f http://localhost:9091/healthz"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,6 +43,13 @@ jobs:
           npm ci
           npm run build
       
+      - name: Start Milvus
+        working-directory: ./tests/integration/full_milvus_test/docker
+        run: |
+          docker compose up -d
+          echo "Waiting for Milvus to start..."
+          sleep 10
+      
       - name: Wait for Milvus to be ready
         run: |
           echo "Waiting for Milvus to be ready..."
@@ -71,6 +63,7 @@ jobs:
             sleep 2
           done
           echo "✗ Milvus failed to start in time"
+          docker logs milvus-standalone-test || true
           exit 1
       
       - name: Verify Milvus connection
@@ -89,6 +82,13 @@ jobs:
           pytest test_full_integration.py -v -s --tb=short
         env:
           MILVUS_URI: http://localhost:19530
+      
+      - name: Stop Milvus
+        if: always()
+        working-directory: ./tests/integration/full_milvus_test/docker
+        run: |
+          docker compose logs milvus-standalone || true
+          docker compose down -v
       
       - name: Upload test artifacts on failure
         if: failure()
