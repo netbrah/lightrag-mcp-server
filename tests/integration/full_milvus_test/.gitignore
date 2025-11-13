@@ -1,0 +1,17 @@
+# Test artifacts
+rag_storage/
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker data
+docker/milvus_data/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
