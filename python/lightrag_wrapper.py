@@ -148,26 +148,71 @@ class LightRAGWrapper:
         logger.info(f"Indexing complete: {success_count}/{len(file_paths)} successful")
         return result
     
+    async def insert_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Insert text content directly without a file"""
+        await self.initialize()
+        
+        logger.info(f"Inserting text content (length: {len(text)} chars)")
+        
+        try:
+            await self.rag.ainsert(text)
+            
+            return {
+                "success": True,
+                "message": f"Successfully inserted {len(text)} characters"
+            }
+            
+        except Exception as e:
+            error_msg = f"Error inserting text: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "success": False,
+                "message": error_msg
+            }
+    
     async def search_code(
         self,
         query: str,
         mode: str = "hybrid",
         top_k: int = 10,
-        only_context: bool = False
+        only_context: bool = False,
+        response_type: str = "Multiple Paragraphs",
+        max_token_for_text_unit: int = 4000,
+        max_token_for_global_context: int = 4000,
+        max_token_for_local_context: int = 4000,
+        hl_keywords: Optional[List[str]] = None,
+        ll_keywords: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """Search code using LightRAG"""
         await self.initialize()
         
         logger.info(f"Searching: query='{query}', mode={mode}, top_k={top_k}")
+        if hl_keywords:
+            logger.info(f"High-level keywords: {hl_keywords}")
+        if ll_keywords:
+            logger.info(f"Low-level keywords: {ll_keywords}")
         
         try:
+            # Build QueryParam with advanced options
+            query_params = {
+                "mode": mode,
+                "only_need_context": only_context,
+                "top_k": top_k,
+                "response_type": response_type,
+                "max_token_for_text_unit": max_token_for_text_unit,
+                "max_token_for_global_context": max_token_for_global_context,
+                "max_token_for_local_context": max_token_for_local_context
+            }
+            
+            # Add keyword filters if provided
+            if hl_keywords:
+                query_params["hl_keywords"] = hl_keywords
+            if ll_keywords:
+                query_params["ll_keywords"] = ll_keywords
+            
             result = await self.rag.aquery(
                 query,
-                param=QueryParam(
-                    mode=mode,
-                    only_need_context=only_context,
-                    top_k=top_k
-                )
+                param=QueryParam(**query_params)
             )
             
             return {
@@ -310,6 +355,8 @@ class LightRAGWrapper:
                 result = await self.visualize_subgraph(**params)
             elif method == "get_indexing_status":
                 result = await self.get_indexing_status()
+            elif method == "insert_text":
+                result = await self.insert_text(**params)
             else:
                 raise ValueError(f"Unknown method: {method}")
             
