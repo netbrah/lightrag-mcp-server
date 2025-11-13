@@ -1,11 +1,16 @@
-import { LightRAGBridge, BridgeConfig } from '../../src/lightrag-bridge.js';
-import { spawn } from 'child_process';
+import { jest } from '@jest/globals';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
-import { jest } from '@jest/globals';
 
-// Mock child_process
-jest.mock('child_process');
+// Mock child_process BEFORE importing LightRAGBridge using unstable_mockModule for ESM
+const mockSpawn = jest.fn();
+await jest.unstable_mockModule('child_process', () => ({
+  spawn: mockSpawn,
+  ChildProcess: EventEmitter,
+}));
+
+// Now dynamically import after setting up mocks
+const { LightRAGBridge } = await import('../../src/lightrag-bridge.js');
 
 // Helper to create a mock readable stream
 function createMockReadable(): Readable {
@@ -18,10 +23,10 @@ function createMockReadable(): Readable {
 }
 
 describe('LightRAGBridge', () => {
-  let bridge: LightRAGBridge;
+  let bridge: any;
   let mockProcess: any;
   
-  const testConfig: BridgeConfig = {
+  const testConfig = {
     workingDir: '/tmp/test',
     openaiApiKey: 'test-key',
     openaiBaseUrl: 'https://test.com',
@@ -42,13 +47,13 @@ describe('LightRAGBridge', () => {
     mockProcess.kill = jest.fn();
     mockProcess.killed = false;
     
-    (spawn as jest.Mock).mockReturnValue(mockProcess);
+    mockSpawn.mockReturnValue(mockProcess);
     
     bridge = new LightRAGBridge(testConfig);
   });
   
   afterEach(async () => {
-    if (bridge.isRunning()) {
+    if (bridge && bridge.isRunning()) {
       await bridge.stop();
     }
     jest.clearAllMocks();
@@ -58,7 +63,7 @@ describe('LightRAGBridge', () => {
     it('should spawn Python process successfully', async () => {
       await bridge.start();
       
-      expect(spawn).toHaveBeenCalledWith(
+      expect(mockSpawn).toHaveBeenCalledWith(
         expect.any(String),
         expect.arrayContaining([expect.stringContaining('lightrag_wrapper.py')]),
         expect.objectContaining({
@@ -174,7 +179,7 @@ describe('LightRAGBridge', () => {
       
       await restartPromise;
       
-      expect(spawn).toHaveBeenCalledTimes(2); // Initial start + restart
+      expect(mockSpawn).toHaveBeenCalledTimes(2); // Initial start + restart
     });
   });
   
