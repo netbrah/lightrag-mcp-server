@@ -1,0 +1,17 @@
+node_modules
+dist
+npm-debug.log
+.env
+.env.local
+.git
+.gitignore
+.vscode
+*.md
+docs
+tests
+.github
+python
+coverage
+*.log
+.DS_Store
+lightrag_storage

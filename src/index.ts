@@ -15,22 +15,26 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { LightRAGBridge } from './lightrag-bridge.js';
-import { LightRAGConfig } from './types.js';
+import { LightRAGHttpClient } from './lightrag-http-client.js';
+
+interface ServerConfig {
+  apiUrl: string;
+  apiKey?: string;
+}
 
 class LightRAGMCPServer {
   private server: Server;
-  private bridge: LightRAGBridge;
-  private config: LightRAGConfig;
+  private client: LightRAGHttpClient;
+  private config: ServerConfig;
 
-  constructor(config: LightRAGConfig) {
+  constructor(config: ServerConfig) {
     this.config = config;
     
     // Initialize MCP server
     this.server = new Server(
       {
         name: 'lightrag-mcp-server',
-        version: '0.1.0',
+        version: '0.2.0',
       },
       {
         capabilities: {
@@ -39,8 +43,12 @@ class LightRAGMCPServer {
       }
     );
 
-    // Initialize Python bridge
-    this.bridge = new LightRAGBridge(config);
+    // Initialize HTTP client
+    this.client = new LightRAGHttpClient({
+      apiUrl: config.apiUrl,
+      apiKey: config.apiKey,
+      timeout: 60000,
+    });
 
     // Setup handlers
     this.setupToolHandlers();
@@ -48,20 +56,9 @@ class LightRAGMCPServer {
   }
 
   private setupLifecycleHandlers() {
-    // Handle bridge errors
-    this.bridge.on('error', (error) => {
-      console.error('Bridge error:', error);
-    });
-
-    // Handle bridge restarts
-    this.bridge.on('restarting', () => {
-      console.log('Bridge restarting...');
-    });
-
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\nShutting down LightRAG MCP server...');
-      await this.cleanup();
       process.exit(0);
     };
 
@@ -306,7 +303,7 @@ class LightRAGMCPServer {
     console.log(`Indexing ${file_paths.length} files...`);
     const startTime = Date.now();
 
-    const result = await this.bridge.call('index_files', { file_paths });
+    const result = await this.client.indexFiles(file_paths);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     
@@ -351,7 +348,7 @@ ${result.errors.length > 5 ? `\n... and ${result.errors.length - 5} more` : ''}`
     console.log(`Searching: "${query}" (mode=${mode})`);
     const startTime = Date.now();
 
-    const result = await this.bridge.call('search_code', { 
+    const result = await this.client.searchCode({ 
       query, 
       mode, 
       top_k, 
@@ -408,7 +405,7 @@ ${result.answer}`;
     console.log(`Inserting text content (${text.length} chars)...`);
     const startTime = Date.now();
 
-    const result = await this.bridge.call('insert_text', { text, metadata });
+    const result = await this.client.insertText(text, metadata);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     
@@ -427,8 +424,8 @@ ${result.answer}`;
     };
   }
 
-  private async handleGetIndexingStatus(args: any) {
-    const status = await this.bridge.call('get_indexing_status', {});
+  private async handleGetIndexingStatus(_args: any) {
+    const status = await this.client.getIndexingStatus();
 
     const storageSizeMB = status.working_dir_size_bytes 
       ? (status.working_dir_size_bytes / (1024 * 1024)).toFixed(2) 
@@ -462,7 +459,7 @@ ${!status.initialized ? '⚠️  No files indexed yet. Use `lightrag_index_codeb
     }
 
     console.log(`Getting entity: ${entity_name}`);
-    const result = await this.bridge.call('get_entity', { entity_name });
+    const result = await this.client.getEntity(entity_name);
 
     const responseText = `## Entity: ${entity_name}
 
@@ -489,7 +486,7 @@ ${result.description}
     }
 
     console.log(`Getting relationships for: ${entity_name} (type=${relation_type}, depth=${depth})`);
-    const result = await this.bridge.call('get_relationships', { entity_name, relation_type, depth });
+    const result = await this.client.getRelationships({ entity_name, relation_type, depth });
 
     const responseText = `## Relationships: ${entity_name}
 
@@ -519,7 +516,7 @@ ${result.relationships}`;
     console.log(`Visualizing: "${query}" (format=${format}, max_nodes=${max_nodes})`);
     const startTime = Date.now();
 
-    const result = await this.bridge.call('visualize_subgraph', { query, format, max_nodes });
+    const result = await this.client.visualizeSubgraph({ query, format, max_nodes });
 
     if (result.error) {
       throw new Error(result.error);
@@ -550,45 +547,34 @@ ${result.diagram}
   }
 
   async start() {
-    // Start Python bridge
-    console.error('Starting Python bridge...');
-    await this.bridge.start();
+    // Test connection to LightRAG API
+    console.error('Testing connection to LightRAG API...');
+    try {
+      await this.client.ping();
+      console.error('✅ Connected to LightRAG API at', this.config.apiUrl);
+    } catch (error: any) {
+      console.error('❌ Failed to connect to LightRAG API:', error.message);
+      console.error('Make sure the LightRAG API server is running at', this.config.apiUrl);
+    }
 
     // Connect MCP server to stdio transport
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
     console.error('LightRAG MCP server running on stdio');
-    console.error(`Working directory: ${this.config.workingDir}`);
-  }
-
-  async cleanup() {
-    await this.bridge.stop();
+    console.error(`API URL: ${this.config.apiUrl}`);
   }
 }
 
 // Main entry point
 async function main() {
   // Validate required environment variables
-  const requiredEnv = ['OPENAI_API_KEY'];
-  const missing = requiredEnv.filter(key => !process.env[key]);
-  
-  if (missing.length > 0) {
-    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
-    console.error('\nPlease set them in your .vscode/mcp.json or environment');
-    process.exit(1);
-  }
+  const apiUrl = process.env.LIGHTRAG_API_URL || 'http://localhost:9621';
+  const apiKey = process.env.LIGHTRAG_API_KEY;
 
-  const config: LightRAGConfig = {
-    workingDir: process.env.LIGHTRAG_WORKING_DIR || './lightrag_storage',
-    openaiApiKey: process.env.OPENAI_API_KEY!,
-    openaiBaseUrl: process.env.OPENAI_BASE_URL || 'https://llm-proxy-api.ai.eng.netapp.com/v1',
-    openaiModel: process.env.OPENAI_MODEL || 'gpt-5',
-    openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-large',
-    milvusAddress: process.env.MILVUS_ADDRESS,
-    neo4jUri: process.env.NEO4J_URI,
-    neo4jUsername: process.env.NEO4J_USERNAME || 'neo4j',
-    neo4jPassword: process.env.NEO4J_PASSWORD,
+  const config: ServerConfig = {
+    apiUrl,
+    apiKey,
   };
 
   const server = new LightRAGMCPServer(config);
