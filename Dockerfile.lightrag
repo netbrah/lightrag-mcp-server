@@ -1,0 +1,39 @@
+# Dockerfile for LightRAG API Server
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone LightRAG repository
+RUN git clone https://github.com/HKUDS/LightRAG.git /app/LightRAG
+
+# Install Python dependencies for LightRAG API
+RUN pip install --no-cache-dir -r /app/LightRAG/lightrag/api/requirements.txt
+
+# Create directories
+RUN mkdir -p /app/rag_storage /app/input
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LIGHTRAG_WORKING_DIR=/app/rag_storage
+ENV LIGHTRAG_INPUT_DIR=/app/input
+
+# Expose API port
+EXPOSE 9621
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:9621/health', timeout=5)"
+
+# Run LightRAG server
+CMD ["python", "/app/LightRAG/lightrag/api/lightrag_server.py", \
+     "--host", "0.0.0.0", \
+     "--port", "9621", \
+     "--working-dir", "/app/rag_storage", \
+     "--input-dir", "/app/input", \
+     "--log-level", "INFO"]

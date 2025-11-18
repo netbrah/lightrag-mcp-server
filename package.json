@@ -20,7 +20,8 @@
     "bundle:offline": "./create-offline-bundle.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.21.1"
+    "@modelcontextprotocol/sdk": "^1.21.1",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
