@@ -4,7 +4,6 @@
  */
 
 import fetch from 'node-fetch';
-import { LightRAGConfig } from './types.js';
 
 export interface LightRAGHttpConfig {
   apiUrl: string;
@@ -89,7 +88,7 @@ export class LightRAGHttpClient {
     return results;
   }
 
-  async insertText(text: string, metadata?: any): Promise<any> {
+  async insertText(text: string, _metadata?: any): Promise<any> {
     const response = await this.request('/documents/text', {
       method: 'POST',
       body: JSON.stringify({

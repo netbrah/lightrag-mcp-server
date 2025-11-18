@@ -424,7 +424,7 @@ ${result.answer}`;
     };
   }
 
-  private async handleGetIndexingStatus(args: any) {
+  private async handleGetIndexingStatus(_args: any) {
     const status = await this.client.getIndexingStatus();
 
     const storageSizeMB = status.working_dir_size_bytes 
